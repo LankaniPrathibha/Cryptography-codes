@@ -1,0 +1,183 @@
+# Part 1: Basic Block Cipher Implementation
+
+# 1. Define Block and Key Sizes
+BLOCK_SIZE = 8  # 8 bits
+KEY_SIZE = 8    # 8 bits
+
+# 2. Implement a Simple Substitution Box (S-box) in binary format
+S_BOX = [
+    [0b1110, 0b0100, 0b1101, 0b0001],  # 0xE, 0x4, 0xD, 0x1
+    [0b0000, 0b1010, 0b0110, 0b1100],  # 0x0, 0xA, 0x6, 0xC
+    [0b0101, 0b1001, 0b0011, 0b0111],  # 0x5, 0x9, 0x3, 0x7
+    [0b1011, 0b0010, 0b1111, 0b1000]   # 0xB, 0x2, 0xF, 0x8
+]
+
+def substitute(nibble):
+    row = (nibble >> 2) & 0x03  # Get the first 2 bits
+    col = nibble & 0x03         # Get the last 2 bits
+    return S_BOX[row][col]
+
+# 3. Implement a Simplified Permutation
+PERMUTATION_TABLE = [1, 5, 2, 6, 3, 7, 4, 0]  # 0-indexed
+
+def permute(block):
+    permuted = 0
+    for i in range(BLOCK_SIZE):
+        permuted |= ((block >> i) & 0x01) << PERMUTATION_TABLE[i]
+    return permuted
+
+# 4. Implement a Basic Feistel Function
+def feistel_function(right_half, key):
+    return right_half ^ key  # Simple XOR operation
+
+# 5. Combine Components for Encryption
+def encrypt(block, key):
+    # Split the block into two halves
+    left_half = (block >> 4) & 0x0F  # First 4 bits
+    right_half = block & 0x0F        # Last 4 bits
+
+    # Apply the Feistel function
+    transformed_right = feistel_function(right_half, key)
+
+    # Substitute the result
+    substituted = substitute(transformed_right)
+
+    # Combine with left half
+    new_left = right_half
+    new_right = substituted
+
+    # Combine halves and permute the result
+    combined_block = (new_left << 4) | new_right
+    return permute(combined_block)
+
+# Decrypt function
+def decrypt(block, key):
+    # Split the block into two halves
+    left_half = (block >> 4) & 0x0F  # First 4 bits
+    right_half = block & 0x0F        # Last 4 bits
+
+    # Reverse the process
+    substituted = substitute(left_half)
+    transformed_left = feistel_function(substituted, key)
+
+    # Combine halves
+    new_left = right_half
+    new_right = transformed_left
+
+    # Combine halves and permute the result
+    combined_block = (new_left << 4) | new_right
+    return permute(combined_block)
+
+# ECB encryption
+def ecb_encrypt(data, key):
+    ciphertext = []
+    for block in data:  # Process each byte (8 bits)
+        encrypted_block = encrypt(block, key)
+        ciphertext.append(encrypted_block)
+    return ciphertext
+
+# ECB decryption
+def ecb_decrypt(ciphertext, key):
+    decrypted_data = []
+    for block in ciphertext:
+        decrypted_block = decrypt(block, key)
+        decrypted_data.append(decrypted_block)
+    return decrypted_data
+
+# Cipher Block Chaining (CBC) Mode Encryption
+def cbc_encrypt(data, key, iv):
+    ciphertext = []
+    previous_block = iv
+    for block in data:  # Process each byte 
+        # XOR with the previous ciphertext block
+        block_to_encrypt = block ^ previous_block
+        encrypted_block = encrypt(block_to_encrypt, key)
+        ciphertext.append(encrypted_block)
+        previous_block = encrypted_block  # Update the previous block
+    return ciphertext
+
+# CBC Mode Decryption
+def cbc_decrypt(ciphertext, key, iv):
+    decrypted_data = []
+    previous_block = iv
+    for block in ciphertext:
+        decrypted_block = decrypt(block, key)
+        # XOR with the previous ciphertext block
+        original_block = decrypted_block ^ previous_block
+        decrypted_data.append(original_block)
+        previous_block = block  # Update the previous block
+    return decrypted_data
+
+# CTR Encryption
+def counter_encrypt(plaintext, key, nonce):
+    ciphertext = []  # This will hold the encrypted blocks
+    counter = 0  # Initialize the counter
+    for byte in plaintext:
+        # Create a unique input by combining nonce and counter
+        input_block = nonce ^ counter
+        encrypted_block = encrypt(input_block, key)  # Encrypt the input block
+        # XOR with the plaintext to get the ciphertext
+        ciphertext.append(encrypted_block ^ byte)
+        counter += 1  # Increment the counter for the next block
+    return ciphertext
+
+# CTR Decryption
+def counter_decrypt(ciphertext, key, nonce):
+    plaintext = []  # This will hold the decrypted blocks
+    counter = 0  # Initialize the counter
+    for byte in ciphertext:
+        # Create a unique input by combining nonce and counter
+        input_block = nonce ^ counter
+        encrypted_block = encrypt(input_block, key)  # Encrypt the input block
+        # XOR with the ciphertext to get the plaintext
+        plaintext.append(encrypted_block ^ byte)
+        counter += 1  # Increment the counter for the next block
+    return plaintext
+
+# Main function to get plaintext and generate ciphertext
+if __name__ == "__main__":
+    try:
+        # Ask for plaintext input in binary format
+        plaintext_input = input("Enter an 8-bit plaintext (in binary, e.g., 0b10101010): ")
+        
+        # Ensure the input is valid
+        if not plaintext_input.startswith("0b"):
+            raise ValueError("Input must be in the format 0bXXXXXXXX where X is 0 or 1.")
+        
+        block = int(plaintext_input, 2)  # Convert binary input to integer
+
+        # Check if the block size is 8 bits
+        if block < 0 or block > 0xFF:
+            raise ValueError("Input must be an 8-bit value (0b00000000 to 0b11111111).")
+
+        # Assign a key value for encryption (8 bits)
+        key = 0b0011  # Example key value in binary format (0x3)
+        iv = 0b0000   # Initial vector for CBC mode
+        nonce = 0b0001  # Example nonce for CTR mode
+
+        # Encrypt the block using ECB
+        ecb_ciphertext = ecb_encrypt([block], key)
+        print(f"ECB Ciphertext: {[hex(c) for c in ecb_ciphertext]}")
+
+        # Decrypt the block using ECB
+        ecb_decrypted = ecb_decrypt(ecb_ciphertext, key)
+        print(f"ECB Decrypted: {[hex(d) for d in ecb_decrypted]}")
+
+        # Encrypt the block using CBC
+        cbc_ciphertext = cbc_encrypt([block], key, iv)
+        print(f"CBC Ciphertext: {[hex(c) for c in cbc_ciphertext]}")
+
+        # Decrypt the block using CBC
+        cbc_decrypted = cbc_decrypt(cbc_ciphertext, key, iv)
+        print(f"CBC Decrypted: {[hex(d) for d in cbc_decrypted]}")
+
+        # Encrypt the block using CTR
+        ctr_ciphertext = counter_encrypt([block], key, nonce)
+        print(f"CTR Ciphertext: {[hex(c) for c in ctr_ciphertext]}")
+
+        # Decrypt the block using CTR
+        ctr_decrypted = counter_decrypt(ctr_ciphertext, key, nonce)
+        print(f"CTR Decrypted: {[hex(d) for d in ctr_decrypted]}")
+
+    except ValueError as e:
+        print(f"Error: {e}")
