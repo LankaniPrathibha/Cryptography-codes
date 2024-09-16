@@ -108,6 +108,7 @@ def cbc_decrypt(ciphertext, key, iv):
         previous_block = block  # Update the previous block
     return decrypted_data
 
+# Bonus marks modes of operation
 # CTR Encryption
 def counter_encrypt(plaintext, key, nonce):
     ciphertext = []  # This will hold the encrypted blocks
